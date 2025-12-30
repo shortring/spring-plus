@@ -11,11 +11,17 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.expert.domain.user.enums.UserRole;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.List;
 
 @Slf4j
 @RequiredArgsConstructor
+@Component
 public class JwtFilter implements Filter {
 
     private final JwtUtil jwtUtil;
@@ -55,10 +61,12 @@ public class JwtFilter implements Filter {
                 return;
             }
 
-            UserRole userRole = UserRole.valueOf(claims.get("userRole", String.class));
+            String role = jwtUtil.extractRole(jwt);
+            UserRole userRole = UserRole.of(role);
 
             httpRequest.setAttribute("userId", Long.parseLong(claims.getSubject()));
             httpRequest.setAttribute("email", claims.get("email"));
+            httpRequest.setAttribute("nickname", claims.get("nickname"));
             httpRequest.setAttribute("userRole", claims.get("userRole"));
 
             if (url.startsWith("/admin")) {
@@ -70,6 +78,13 @@ public class JwtFilter implements Filter {
                 chain.doFilter(request, response);
                 return;
             }
+
+            // spring security user 객체 생성
+            String username = jwtUtil.extractUsername(jwt);
+            String password = jwtUtil.extractPassword(jwt);
+            User user = new User(username, password, List.of(userRole::getRole));
+
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities()));
 
             chain.doFilter(request, response);
         } catch (SecurityException | MalformedJwtException e) {
